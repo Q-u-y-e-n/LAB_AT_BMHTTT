@@ -1,4 +1,10 @@
 # BÁO CÁO TÓM TẮT THỰC HÀNH LAB 3
+
+## 1. THÔNG TIN SINH VIÊN
+* **Họ và tên:** Châu Thị Ngọc Quyên
+* **Mã số sinh viên (MSSV):** 1150080113
+* **Lớp / Học phần:** An toàn hệ thống thông tin
+
 ## NHẬN DIỆN VÀ ỨNG PHÓ CÁC MỐI ĐE DỌA AN TOÀN THÔNG TIN
 
 - **Môi trường:** Windows 10 VM (Host-only / tạm chuyển NAT tại TH5 để kiểm thử gói tin TLS).
