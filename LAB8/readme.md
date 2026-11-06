@@ -11,99 +11,87 @@
 
 ---
 
-## 1. Bảng Phân Bổ Mạng & Ánh Xạ Máy Ảo
+# BÁO CÁO TIẾN TRÌNH THỰC HÀNH LAB: DNS SPOOFING & CACHE POISONING
 
-| Tên VM trên VMware | Vai trò trong bài Lab | Card mạng kết nối (VMware) | Địa chỉ IPv4 gán tĩnh | Ghi chú cấu hình |
-| :--- | :--- | :--- | :--- | :--- |
-| **pfSense** | Gateway / Firewall | Adapter 5: **VMnet9** | `10.9.0.1/24` | Gateway mặc định của mạng DNS-LAB |
-| **Ubuntu64-bit** (Clone) | **DNS-SERVER** (BIND9) | **VMnet9** | `10.9.0.10/24` | Recursive Resolver & Local Master Zone |
-| **Client-B** | **VICTIM** | **VMnet9** | `10.9.0.100/24` | DNS trỏ duy nhất về `10.9.0.10` |
-| **kali-linux-...** | **ATTACKER** | **VMnet9** | `10.9.0.200/24` | Chạy Scapy spoofing, Web Server giả lập |
-| **WEB-PROXY** / VM DMZ | **APP-TEST / AUTH-DNS** | DMZ Network | `172.16.6.20/24` | Authoritative DNS mô phỏng độ trễ 1.5s |
-| **DMZ-WEB** | Web mục tiêu hợp lệ | DMZ Network | `172.16.6.10/24` | Chạy Web Server gốc (cổng 80) |
-
----
-
-## 2. Các Bước Đã Hoàn Thành
-
-### Bước 1: Thiết lập mạng & pfSense Interface
-- [x] Tạo dải mạng nội bộ riêng **VMnet9** (Host-only, tắt DHCP tích hợp).
-- [x] Thêm card mạng thứ 5 cho pfSense kết nối tới **VMnet9**.
-- [x] Gán interface mới mang tên **`DNSLAB`** với IP: `10.9.0.1/24` (không thiết lập Upstream Gateway).
-- [x] Thiết lập 5 firewall rules cô lập cho interface `DNSLAB`:
-  1. `Pass` UDP/TCP 53 từ `10.9.0.10` sang `172.16.6.20` (DNS đệ quy ra ngoài).
-  2. `Pass` TCP 80 từ `10.9.0.0/24` sang `172.16.6.10` (Victim vào web DMZ hợp lệ).
-  3. `Block + Log` từ `10.9.0.0/24` sang `10.6.0.0/24` (Bảo vệ mạng LAN-DOMAIN).
-  4. `Block + Log` từ `10.9.0.0/24` sang `192.168.56.0/24` (Bảo vệ MGMT).
-  5. `Block + Log` từ `10.9.0.0/24` sang `any` (Default isolate rule).
+## 1. Môi trường & Hạ tầng mạng (VMware Workstation)
+* **Phân đoạn mạng**: `VMnet9` (Mạng cô lập / Isolated Custom Network)
+* **Firewall / Router**: pfSense 
+  * Interface `DNSLAB`: `10.9.0.1/24`
+* **DNS-SERVER**: Ubuntu Server
+  * IP tĩnh: `10.9.0.10/24`
+  * Gateway: `10.9.0.1`
+  * Dịch vụ: BIND 9 (DNS Server phân giải thuận & nghịch)
+* **Client-B (Victim)**: Windows 10
+  * IP tĩnh: `10.9.0.100/24`
+  * Gateway: `10.9.0.1`
+  * Preferred DNS Server: `10.9.0.10`
+* **Attacker**: Kali Linux
+  * IP tĩnh: `10.9.0.200/24`
+  * Gateway: `10.9.0.1`
+  * Dịch vụ: Web Server giả mạo (Python HTTP server trên cổng 80)
+* **DMZ**: Máy chủ hợp lệ / Authoritative DNS
+  * IP: `172.16.6.20` (AUTH-DNS: `auth_dns_delayed.py`)
+  * Web Server gốc: `172.16.6.10`
 
 ---
 
-### Bước 2: Cấu hình DNS-SERVER (10.9.0.10)
-- [x] Gán IP tĩnh `10.9.0.10/24`, Gateway `10.9.0.1` qua Netplan.
-- [x] Cài đặt các gói `bind9` và `dnsutils`.
-- [x] Cấu hình file `/etc/bind/named.conf.options`:
-  - Cho phép phân giải đệ quy cho dải `10.9.0.0/24`.
-  - Thiết lập `server 172.16.6.20 { send-cookie no; };` để tái lập kịch bản tấn công on-path.
-- [x] Cấu hình file `/etc/bind/named.conf.local`:
-  - Khai báo Master zone thuận: `lab9.test` trỏ file `/etc/bind/db.lab9.test`.
-  - Khai báo Master zone nghịch: `9.10.in-addr.arpa` trỏ file `/etc/bind/db.10.9.0`.
-  - Khai báo Forward zone: `external.lab9.test` forward tới `172.16.6.20`.
-- [x] Đã tạo file dữ liệu các zone `db.lab9.test` và `db.10.9.0`.
-- [x] Đã kiểm tra cú pháp cấu hình thành công:
-  - `sudo named-checkconf` (Không còn lỗi cú pháp).
+## 2. Các cấu hình cốt lõi đã hoàn tất
+
+### A. Cấu hình BIND9 trên DNS-SERVER (10.9.0.10)
+* **File `/etc/bind/named.conf.options`**:
+  * Thiết lập `recursion yes;` và giới hạn `allow-recursion { 10.9.0.0/24; localhost; };`.
+  * Lắng nghe cổng 53: `listen-on port 53 { 127.0.0.1; 10.9.0.10; };`.
+  * Tắt kiểm tra bảo mật: `dnssec-validation no;` và tắt cookie máy chủ ngoài: `server 172.16.6.20 { send-cookie no; };`.
+* **File `/etc/bind/named.conf.local`**:
+  * Khai báo zone thuận: `lab9.test` (sử dụng file `/etc/bind/db.lab9.test`).
+  * Khai báo zone nghịch chuẩn cho dải `/24`: `0.9.10.in-addr.arpa` (sử dụng file `/etc/bind/db.10.9.0`).
+  * Khai báo zone chuyển tiếp: `external.lab9.test` forward về Authoritative DNS `172.16.6.20`.
+* **Cơ sở dữ liệu Zone (`db.lab9.test` & `db.10.9.0`)**:
+  * Đã ánh xạ đầy đủ bản ghi A và PTR cho các nút: `ns` / `www` (`10.9.0.10`), `victim` (`10.9.0.100`), `kali` (`10.9.0.200`).
+
+### B. Cấu hình Client-B (Windows 10)
+* Thiết lập adapter mạng nhận diện đúng phân đoạn `VMnet9`.
+* Cấu hình tĩnh thông số IPv4: `10.9.0.100`, subnet `255.255.255.0`, gateway `10.9.0.1`, DNS `10.9.0.10`.
+* Kiểm tra thông tuyến: Ping thành công tới `10.9.0.10` (`time<1ms TTL=64`).
+* Kiểm tra phân giải: `nslookup www.lab9.test` nhận diện máy chủ `Server: www.lab9.test` và trả về `Address: 10.9.0.10`.
+
+### C. Cấu hình máy Attacker (Kali Linux)
+* Đã gán IP tĩnh cho card mạng: `10.9.0.200/24`.
+* Đã chuẩn bị thư mục chứa mã nguồn web giả mạo `~/fake_site/index.html` và sẵn sàng chạy web server trên cổng 80 (`python3 -m http.server 80`).
 
 ---
 
-## 3. Các Bước Cần Thực Hiện Tiếp Theo
-
-### Bước 3: Hoàn tất khởi động BIND9 & Baseline trên DNS-SERVER
-Chạy các lệnh kiểm tra zone và khởi động dịch vụ:
-```bash
-sudo named-checkzone lab9.test /etc/bind/db.lab9.test
-sudo named-checkzone 9.10.in-addr.arpa /etc/bind/db.10.9.0
-sudo systemctl restart bind9
-sudo ss -lunpt | grep :53
-```
-Kiểm tra phân giải baseline nội bộ (📸 **Chụp ảnh minh chứng**):
-```bash
-dig @10.9.0.10 www.lab9.test A +short
-dig @10.9.0.10 -x 10.9.0.10 +short
-```
+## 3. Nhật ký xử lý sự cố (Troubleshooting Log)
+1. **Lỗi tải gói trên Ubuntu do IP tĩnh không khớp card NAT**:
+   * *Hiện tượng*: `Destination Host Unreachable` khi ping `8.8.8.8` để cài BIND9.
+   * *Xử lý*: Chuyển tạm thời sang DHCP trên card NAT, chạy `sudo ip addr flush dev ens33`, nạp lại Netplan để tải gói `bind9` và `dnsutils`, sau đó trả về `VMnet9` với IP tĩnh `10.9.0.10`.
+2. **Lỗi cú pháp cấu hình BIND9 (`named.conf.local`)**:
+   * *Hiện tượng*: Lỗi `missing ';'` và `unknown option 'external.lab9.test'`.
+   * *Nguyên nhân*: Thiếu dấu ngoặc kép đóng `"` và sai chính tả từ khóa `forwarders`.
+   * *Xử lý*: Bổ sung dấu `"` vào `db.10.9.0";` và sửa thành `forwarders { 172.16.6.20; };`.
+3. **Lỗi `Server: UnKnown` và Timeout 2 giây trên Windows 10**:
+   * *Nguyên nhân*: Khai báo thiếu octet trong tên zone phân giải nghịch (`9.10.in-addr.arpa` thay vì `0.9.10.in-addr.arpa`).
+   * *Xử lý*: Đổi tên zone trong `named.conf.local` thành `0.9.10.in-addr.arpa`, giúp Windows tra cứu thành công bản ghi PTR.
 
 ---
 
-### Bước 4: Thiết lập máy VICTIM & ATTACKER
-1. **VICTIM (10.9.0.100 - Client-B):**
-   - Đặt IP tĩnh: `10.9.0.100/24`, Gateway `10.9.0.1`, DNS: `10.9.0.10`.
-   - Kiểm tra `resolvectl query www.lab9.test`.
-2. **ATTACKER (10.9.0.200 - Kali Linux):**
-   - Đặt IP card VMnet9: `10.9.0.200/24`.
-   - Bật web server giả lập:
-     ```bash
-     mkdir -p ~/LAB9/fake_site
-     cp fake_index.html ~/LAB9/fake_site/index.html
-     sudo python3 -m http.server 80 --directory ~/LAB9/fake_site
-     ```
+## 4. Tiến trình bài tập (Tasks Progress)
+
+### [ĐÃ HOÀN THÀNH] Task 1: Thay đổi độ ưu tiên phân giải bằng file Hosts
+* Thêm bản ghi `10.9.0.200    www.lab9.test` vào `C:\Windows\System32\drivers\etc\hosts`.
+* Gửi truy vấn kiểm tra: `ping www.lab9.test` tự động trỏ về IP của Kali `10.9.0.200`.
+* Kiểm chứng độ ưu tiên: `curl http://www.lab9.test` định tuyến sang Attacker Server, trong khi `nslookup www.lab9.test 10.9.0.10` vẫn truy vấn trực tiếp và nhận IP chuẩn `10.9.0.10`.
+* Dọn dẹp: Đã xóa bản ghi giả mạo trong file `hosts` và chạy `ipconfig /flushdns`.
 
 ---
 
-### Bước 5: Baseline Hệ Thống
-1. Trên máy APP-TEST (`172.16.6.20`), khởi chạy:
-   ```bash
-   sudo python3 auth_dns_delayed.py --bind 172.16.6.20 --delay 1.5
-   ```
-2. Trên DNS-SERVER: `sudo rndc flush`.
-3. Trên máy VICTIM:
-   ```bash
-   dig @10.9.0.10 www.external.lab9.test A +noall +answer
-   curl http://www.external.lab9.test
-   ```
-   *Yêu cầu:* Kết quả bắt buộc phải trả về IP gốc **`172.16.6.10`** (📸 **Chụp ảnh minh chứng**).
-
----
-
-### Bước 6: Thực hiện 3 kịch bản tấn công (Attack Phase)
-* **Task 1:** Chỉnh sửa file `/etc/hosts` trên máy Victim trỏ `www.lab9.test` về `10.9.0.200`. So sánh giữa `curl` (vào site giả) và `dig` (vẫn ra IP thật).
-* **Task 2 (Direct DNS Spoofing):** Chạy `dns_spoof_lab9.py --mode victim` trên Kali để giả mạo phản hồi trả trực tiếp về máy Victim.
-* **Task 3 (DNS Cache Poisoning):** Chạy `dns_spoof_lab9.py --mode resolver` trên Kali để đầu độc trực tiếp bộ nhớ đệm cache của DNS-SERVER BIND9.
+## 5. Các bước triển khai tiếp theo (Next Steps)
+1. **Chuẩn bị Baseline cho Task 2**:
+   * Khởi chạy `auth_dns_delayed.py` trên máy DMZ (`172.16.6.20`).
+   * Xóa cache trên DNS-SERVER: `sudo rndc flush`.
+   * Kiểm tra truy vấn từ Client-B: `nslookup www.external.lab9.test` phân giải ra đúng IP DMZ `172.16.6.10`.
+2. **Task 2: Trực tiếp giả mạo phản hồi DNS (Direct DNS Spoofing)**:
+   * Chạy script giả lập bắt và phản hồi gói tin DNS từ Kali Linux (`dns_spoof_lab9.py`).
+   * Gửi truy vấn từ Victim để kiểm tra việc nhận phản hồi giả trước khi Authoritative DNS thật kịp phản hồi.
+3. **Task 3: Đầu độc bộ nhớ đệm DNS (DNS Cache Poisoning)**:
+   * Thực hiện kỹ thuật làm nhiễm độc cache trên máy DNS-SERVER, buộc server lưu trữ IP giả mạo trong TTL quy định.
