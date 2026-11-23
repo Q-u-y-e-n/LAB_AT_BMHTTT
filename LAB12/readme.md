@@ -96,9 +96,3 @@ GO
   3. Mở lần lượt các chức năng **3.2 RSA**, **3.3 ECC**, **3.4 RSA + AES**, **3.5 Chữ ký ECDSA** để thực hiện thao tác.
   4. Chọn **Xem lịch sử** trên Menu chính (hoặc truy vấn bảng `dbo.History` trong SSMS) để kiểm tra dữ liệu đã lưu.
 
----
-
-## 5. Lưu ý bảo mật
-
-* Không đưa mật khẩu kết nối CSDL hoặc khóa riêng thật (`PRIVATE=...`) lên kho mã nguồn công khai.
-* Các tệp khóa lưu từ giao diện chỉ phục vụ mục đích kiểm thử cục bộ.
