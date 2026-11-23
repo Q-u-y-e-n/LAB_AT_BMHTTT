@@ -1,54 +1,39 @@
 # LAB 3: MÃ HÓA KHÓA CÔNG KHAI & CHỮ KÝ SỐ (JAVA & SQL SERVER)
 
-Ứng dụng minh họa các nguyên lý và kỹ thuật mật mã khóa công khai (Asymmetric Cryptography) xây dựng bằng Java Swing (Maven), kết hợp ghi nhận nhật ký thao tác vào cơ sở dữ liệu Microsoft SQL Server thông qua JDBC.
+Ứng dụng Java Swing xây dựng bằng Maven minh họa các thuật toán mật mã khóa công khai (**RSA**, **ECC**, **Hệ mã lai RSA + AES-GCM**, **Chữ ký số ECDSA**), tích hợp lưu trữ và tra cứu nhật ký thao tác trên **Microsoft SQL Server**.
 
 ---
 
-## 1. Tính năng & Nội dung thực hành
+## 1. Chức năng chính
 
-Dự án bao gồm chương trình chạy trên Console và hệ thống giao diện đồ họa (Java Swing) tích hợp qua Menu chính (`frm_Menu`):
-
-* **Bài 3.1 – Mật mã RSA Console (`RSADemo.java`):**
-  * Tạo cặp khóa RSA kích thước `2048 bit` và `3072 bit`.
-  * Mã hóa và giải mã thông điệp ngắn bằng chuẩn **RSA-OAEP với SHA-256** (`RSA/ECB/OAEPWithSHA-256AndMGF1Padding`).
-  * Đo thời gian sinh khóa, độ dài bản mã Base64 và kiểm chứng giới hạn kích thước bản rõ ($190\text{ byte}$ với RSA-2048 và $318\text{ byte}$ với RSA-3072).
-* **Bài 3.2 – Mật mã RSA Swing (`frm_RSA.java`):**
-  * Giao diện trực quan cho phép chọn kích thước khóa, tạo khóa, mã hóa và giải mã.
-  * Minh họa tính ngẫu nhiên của đệm OAEP (cùng một bản rõ khi mã hóa nhiều lần sẽ sinh ra các bản mã khác nhau nhưng đều giải mã về đúng bản rõ gốc).
-* **Bài 3.3 – Mật mã đường cong Elliptic (`frm_ECC.java`):**
-  * Sinh cặp khóa trên đường cong chuẩn **`secp256r1` (P-256)**.
-  * Thực hiện mã hóa theo mô hình **ECIES**: trao đổi khóa **ECDH** tạo bí mật chung $\rightarrow$ dẫn xuất khóa phiên bằng **HKDF-SHA256** $\rightarrow$ mã hóa xác thực dữ liệu bằng **AES-256-GCM**.
-  * Hỗ trợ lưu/nạp cặp khóa ra tệp văn bản (`Save Keys` / `Load Keys`) và kiểm thử từ chối giải mã khi dùng sai khóa riêng (`AEADBadTagException: Tag mismatch`).
-* **Bài 3.4 – Hệ mã lai RSA + AES-GCM (`frm_RSA_AES.java`):**
-  * Giải quyết nhược điểm giới hạn kích thước của RSA bằng cách dùng **AES-256-GCM** mã hóa văn bản dài ($> 1.000\text{ ký tự}$) và dùng **RSA-OAEP** mã hóa khóa phiên AES $32\text{ byte}$.
-  * Tích hợp chức năng giả lập chỉnh sửa bản mã (`Sửa 1 ký tự bản mã`) để kiểm chứng khả năng phát hiện sai lệch toàn vẹn dữ liệu của AES-GCM.
-* **Bài 3.5 – Chữ ký số ECDSA (`frm_ECC_Signature.java`):**
-  * Ký số thông điệp bằng khóa riêng và xác minh bằng khóa công khai theo thuật toán **`SHA256withECDSA`**.
-  * Kiểm thử trạng thái hợp lệ (`VALID`) và không hợp lệ (`INVALID`) khi thông điệp bị thay đổi hoặc dùng sai khóa công khai xác minh.
-* **Tích hợp SQL Server (`frm_KetNoiSQL.java` & `frm_LichSu.java`):**
-  * Quản lý cấu hình kết nối an toàn trong bộ nhớ (`DbConfig`), không lưu cứng mật khẩu vào mã nguồn.
-  * Tự động ghi nhật ký các thao tác (`ENCRYPT`, `DECRYPT`, `SIGN`, `VERIFY`), thuật toán, độ dài đầu vào và trạng thái thành công/thất bại vào bảng `dbo.History`.
+* **Bài 3.1 – RSA Console (`RSADemo.java`):** Tạo cặp khóa RSA `2048`/`3072 bit`; mã hóa và giải mã chuẩn `RSA-OAEP (SHA-256)`; đo thời gian sinh khóa và kiểm tra giới hạn kích thước bản rõ ($190\text{ byte}$ và $318\text{ byte}$).
+* **Bài 3.2 – RSA Giao diện (`frm_RSA.java`):** Mã hóa/giải mã trực quan và quan sát tính ngẫu nhiên của đệm OAEP qua các lần mã hóa cùng một bản rõ.
+* **Bài 3.3 – Mật mã đường cong Elliptic (`frm_ECC.java`):** Sinh khóa trên đường cong `secp256r1` (P-256); mã hóa theo mô hình **ECIES** (`ECDH + HKDF-SHA256 + AES-256-GCM`); hỗ trợ lưu/nạp khóa (`Save Keys` / `Load Keys`) và phát hiện giải mã sai khóa (`AEADBadTagException`).
+* **Bài 3.4 – Hệ mã lai RSA + AES (`frm_RSA_AES.java`):** Mã hóa văn bản dài ($> 1.000\text{ ký tự}$) bằng `AES-256-GCM` và bọc khóa phiên AES bằng `RSA-OAEP`; kiểm thử phát hiện bản mã bị chỉnh sửa.
+* **Bài 3.5 – Chữ ký số ECDSA (`frm_ECC_Signature.java`):** Ký số bằng khóa riêng và xác minh bằng khóa công khai (`SHA256withECDSA`), phân biệt trạng thái `VALID` / `INVALID`.
+* **Quản lý kết nối & Lịch sử (`frm_KetNoiSQL.java`, `frm_LichSu.java`):** Lưu thông tin kết nối SQL Server an toàn trong bộ nhớ phiên chạy và tự động ghi log vào bảng `dbo.History`.
 
 ---
 
-## 2. Cấu trúc Project
+## 2. Cấu trúc mã nguồn
 
 ```text
 LAB12_MaHoaKhoaCongKhai/
-├── pom.xml                          # Khai báo thư viện mssql-jdbc và cấu hình Java 17
+├── pom.xml                          # Cấu hình Java 17 và thư viện mssql-jdbc
+├── README.md                        # Tài liệu hướng dẫn dự án
 └── src/main/java/week_03/
-    ├── CryptoSupport.java           # Hàm tiện ích: Base64, UTF-8, AES-256-GCM, HKDF-SHA256, xử lý tệp khóa
-    ├── FileTextIO.java              # Hộp thoại mở/lưu tệp văn bản .txt (UTF-8)
-    ├── DbConfig.java                # Lưu trữ thông tin kết nối SQL Server trong phiên chạy
-    ├── HistoryDao.java              # Thao tác INSERT/SELECT bảng dbo.History qua PreparedStatement
-    ├── RSACipher.java               # Xử lý thuật toán RSA-OAEP (2048/3072 bit)
-    ├── RSADemo.java                 # Chương trình Console cho Bài 3.1
-    ├── ECCCipher.java               # Xử lý thuật toán ECC (ECDH + HKDF + AES-GCM)
-    ├── RSA_AES_Cipher.java          # Xử lý hệ mã lai RSA + AES-256-GCM
+    ├── CryptoSupport.java           # Tiện ích Base64, UTF-8, AES-GCM, HKDF, tệp khóa
+    ├── FileTextIO.java              # Đọc/ghi tệp văn bản .txt (UTF-8)
+    ├── DbConfig.java                # Quản lý cấu hình kết nối SQL Server
+    ├── HistoryDao.java              # Truy vấn INSERT/SELECT bảng dbo.History
+    ├── RSACipher.java               # Xử lý thuật toán RSA-OAEP
+    ├── RSADemo.java                 # Chương trình Console Bài 3.1
+    ├── ECCCipher.java               # Xử lý thuật toán ECC (ECIES)
+    ├── RSA_AES_Cipher.java          # Xử lý hệ mã lai RSA + AES-GCM
     ├── ECCSignature.java            # Xử lý ký số và xác minh ECDSA
-    ├── frm_Menu.java                # Cửa sổ giao diện chính điều hướng toàn bộ chương trình
-    ├── frm_KetNoiSQL.java           # Giao diện cấu hình và kiểm tra kết nối SQL Server
-    ├── frm_LichSu.java              # Giao diện tra cứu lịch sử thao tác từ dbo.History
+    ├── frm_Menu.java                # Giao diện Menu chính của ứng dụng
+    ├── frm_KetNoiSQL.java           # Giao diện kết nối SQL Server
+    ├── frm_LichSu.java              # Giao diện xem lịch sử thao tác
     ├── frm_RSA.java                 # Giao diện Bài 3.2
     ├── frm_ECC.java                 # Giao diện Bài 3.3
     ├── frm_RSA_AES.java             # Giao diện Bài 3.4
@@ -57,15 +42,10 @@ LAB12_MaHoaKhoaCongKhai/
 
 ---
 
-## 3. Yêu cầu hệ thống & Cài đặt CSDL
+## 3. Cài đặt Cơ sở dữ liệu (SQL Server)
 
-### Yêu cầu môi trường
-* **JDK:** Java 17 trở lên.
-* **IDE:** Eclipse / Apache NetBeans hỗ trợ Maven.
-* **Database:** Microsoft SQL Server (đã bật giao thức **TCP/IP** tại cổng **`14333`** và chế độ xác thực **Mixed Mode**).
-
-### Khởi tạo Cơ sở dữ liệu
-Mở **SQL Server Management Studio (SSMS)** và thực thi đoạn script sau để tạo database `LAB3_MaHoaKhoaCongKhai`, bảng `dbo.History` và tài khoản `lab3_user`:
+1. Mở **SQL Server Configuration Manager**, bật **TCP/IP** và cấu hình cổng tĩnh **`14333`** tại mục `IPAll`, sau đó khởi động lại dịch vụ SQL Server.
+2. Mở **SSMS** (đảm bảo đã bật chế độ xác thực **Mixed Mode**) và chạy script khởi tạo sau:
 
 ```sql
 USE master;
@@ -107,20 +87,18 @@ GO
 
 ---
 
-## 4. Hướng dẫn chạy & Kiểm thử
+## 4. Hướng dẫn chạy chương trình
 
-1. **Chạy Bài 3.1 (Console):**
-   * Chạy tệp `week_03/RSADemo.java`.
-   * Nhập kích thước khóa (`2048` hoặc `3072`) và bản rõ `HELLO RSA` trên cửa sổ Console để xem kết quả.
-2. **Chạy hệ thống giao diện chính:**
-   * Chạy tệp `week_03/frm_Menu.java`.
-   * Chọn **Kết nối SQL Server**, nhập mật khẩu của `lab3_user` (`LabUser@2026`) và bấm **Test Connection**.
-   * Mở lần lượt các chức năng **3.2 RSA**, **3.3 ECC**, **3.4 RSA + AES**, **3.5 Chữ ký ECDSA** để thực hiện mã hóa, giải mã, ký số và xác minh.
-   * Chọn **Xem lịch sử** trên Menu chính (hoặc truy vấn trực tiếp bảng `dbo.History` trong SSMS) để kiểm tra nhật ký thao tác đã được ghi nhận.
+* **Chạy Bài 3.1 (Console):** Chạy tệp `week_03/RSADemo.java`, nhập kích thước khóa (`2048` hoặc `3072`) và bản rõ `HELLO RSA` trên cửa sổ Console.
+* **Chạy hệ thống giao diện chính:**
+  1. Chạy tệp `week_03/frm_Menu.java`.
+  2. Chọn **Kết nối SQL Server**, nhập mật khẩu tài khoản `lab3_user` (`LabUser@2026`) và bấm **Test Connection**.
+  3. Mở lần lượt các chức năng **3.2 RSA**, **3.3 ECC**, **3.4 RSA + AES**, **3.5 Chữ ký ECDSA** để thực hiện thao tác.
+  4. Chọn **Xem lịch sử** trên Menu chính (hoặc truy vấn bảng `dbo.History` trong SSMS) để kiểm tra dữ liệu đã lưu.
 
 ---
 
 ## 5. Lưu ý bảo mật
 
-* Không lưu trữ hoặc công khai khóa riêng (`PRIVATE=...`) thật và mật khẩu cơ sở dữ liệu lên kho mã nguồn công khai (GitHub/GitLab).
-* Các tệp khóa xuất ra từ chương trình (`ecc_keys.txt`, `rsa_aes_keys.txt`, `ecdsa_keys.txt`) chỉ phục vụ mục đích thử nghiệm cục bộ.
+* Không đưa mật khẩu kết nối CSDL hoặc khóa riêng thật (`PRIVATE=...`) lên kho mã nguồn công khai.
+* Các tệp khóa lưu từ giao diện chỉ phục vụ mục đích kiểm thử cục bộ.
